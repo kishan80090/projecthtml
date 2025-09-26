@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Rubik's Cube — Scramble + Solver (Inverse)</title>
+<style>
+  body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 18px; background:#f6f8fb; color:#111; transition: background 0.3s, color 0.3s;}
+  .container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start; }
+  .card { background: white; padding: 12px; border-radius: 10px; box-shadow: 0 6px 20px rgba(15,30,40,0.06); transition: background 0.3s, color 0.3s;}
+  h1 { margin: 0 0 10px 0; font-size: 20px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;}
+  button { padding: 8px 10px; border-radius: 8px; border: none; cursor: pointer; background: #2563eb; color: white; }
+  button.secondary { background:#e5e7eb; color:#111; }
+  #svgWrap { text-align:center; padding:10px; }
+  .moves { margin-top: 8px; font-family: monospace; white-space: pre-wrap; max-height: 260px; overflow:auto; background:#fafafa; padding:8px; border-radius:6px; }
+  .log { font-size: 13px; color:#333; }
+  .small { font-size: 13px; color:#666; }
+  label { display:block; margin-top:8px; font-size:13px; color:#333; }
+
+  /* Dark mode styles */
+  body.dark { background:#1e293b; color:#f1f5f9; }
+  body.dark .card { background:#334155; color:#f1f5f9; }
+  body.dark button.secondary { background:#475569; color:#f1f5f9; }
+  body.dark .moves { background:#475569; color:#f1f5f9; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>Rubik's Cube — Scramble & Solver</h1>
+    <div class="controls">
+      <button id="scrambleBtn">Scramble (20 moves)</button>
+      <button id="showScrambleBtn" class="secondary">Show scramble moves</button>
+      <button id="solveBtn">Solve (reverse scramble)</button>
+      <button id="stepSolveBtn" class="secondary">Step-by-step Solve</button>
+    </div>
+
+    <div id="svgWrap"></div>
+
+    <label>Current cube state (face order: U R F D L B)</label>
+    <div id="stateStr" class="small"></div>
+
+    <label>Moves log</label>
+    <div id="movesLog" class="moves"></div>
+  </div>
+
+  <div class="card">
+    <h1>About / Notes</h1>
+    <div class="log">
+      <p>This demo implements a Cube class with standard face notation and manual rotations.</p>
+      <p><strong>Moves supported:</strong> U, U', R, R', F, F', D, D', L, L', B, B'</p>
+      <p>Scramble is generated as random sequence of moves. Solver uses the exact inverse of scramble moves (reversed order, each move inverted).</p>
+    </div>
+
+    <label>Scramble moves</label>
+    <div id="scrambleMoves" class="moves">(none)</div>
+
+    <label>Solve steps</label>
+    <div id="solveMoves" class="moves">(none)</div>
+
+    <div style="margin-top:12px">
+      <button id="randomScramble5" class="secondary">Scramble (5 moves)</button>
+      <button id="randomScramble40" class="secondary">Scramble (40 moves)</button>
+    </div>
+
+    <div style="margin-top:12px">
+      <button id="lightBtn" class="secondary">Light Mode</button>
+      <button id="darkBtn" class="secondary">Dark Mode</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Light / Dark mode toggle */
+document.getElementById('lightBtn').addEventListener('click', () => {
+  document.body.classList.remove('dark');
+});
+document.getElementById('darkBtn').addEventListener('click', () => {
+  document.body.classList.add('dark');
+});
+
+/* === Your cube code below remains same === */
+class Cube {
+  constructor() {
+    this.faces = {
+      U: Array(9).fill('w'), 
+      R: Array(9).fill('r'),
+      F: Array(9).fill('g'), 
+      D: Array(9).fill('y'),
+      L: Array(9).fill('o'), 
+      B: Array(9).fill('b') 
+    };
+  }
+  clone() {
+    const c = new Cube();
+    for (const k of Object.keys(this.faces)) c.faces[k] = this.faces[k].slice();
+    return c;
+  }
+  toColorString() {
+    const order = ['U','R','F','D','L','B'];
+    return order.map(f => this.faces[f].join('')).join('');
+  }
+  rotateFaceCW(faceArr, n=1) {
+    n = ((n%4)+4)%4;
+    let a = faceArr.slice();
+    for (let t=0;t<n;t++) {
+      a = [
+        a[6], a[3], a[0],
+        a[7], a[4], a[1],
+        a[8], a[5], a[2]
+      ];
+    }
+    return a;
+  }
+  applyMove(move) {
+    const base = move[0];
+    const prime = move.length>1 && move[1] === "'";
+    const times = prime ? 3 : 1;
+    switch(base) {
+      case 'U': this.move_U(times); break;
+      case 'R': this.move_R(times); break;
+      case 'F': this.move_F(times); break;
+      case 'D': this.move_D(times); break;
+      case 'L': this.move_L(times); break;
+      case 'B': this.move_B(times); break;
+      default: console.warn("Unknown move", move);
+    }
+  }
+  _cyclePositions(positions) {
+    const vals = positions.map(([f,i]) => this.faces[f][i]);
+    for (let i=0;i<positions.length;i++) {
+      const [f,iidx] = positions[i];
+      this.faces[f][iidx] = vals[(i - 1 + positions.length) % positions.length];
+    }
+  }
+  move_U(times=1) {
+    this.faces.U = this.rotateFaceCW(this.faces.U, times);
+    for (let t=0;t<times;t++) {
+      this._cyclePositions([
+        ['F',0],['F',1],['F',2],
+        ['R',0],['R',1],['R',2],
+        ['B',0],['B',1],['B',2],
+        ['L',0],['L',1],['L',2]
+      ]);
+    }
+  }
+  move_D(times=1) {
+    this.faces.D = this.rotateFaceCW(this.faces.D, times);
+    for (let t=0;t<times;t++) {
+      this._cyclePositions([
+        ['F',6],['F',7],['F',8],
+        ['L',6],['L',7],['L',8],
+        ['B',6],['B',7],['B',8],
+        ['R',6],['R',7],['R',8]
+      ]);
+    }
+  }
+  move_R(times=1) {
+    this.faces.R = this.rotateFaceCW(this.faces.R, times);
+    for (let t=0;t<times;t++) {
+      this._cyclePositions([
+        ['U',2],['U',5],['U',8],
+        ['F',2],['F',5],['F',8],
+        ['D',2],['D',5],['D',8],
+        ['B',6],['B',3],['B',0] 
+      ]);
+    }
+  }
+  move_L(times=1) {
+    this.faces.L = this.rotateFaceCW(this.faces.L, times);
+    for (let t=0;t<times;t++) {
+      this._cyclePositions([
+        ['U',0],['U',3],['U',6],
+        ['B',8],['B',5],['B',2],
+        ['D',0],['D',3],['D',6],
+        ['F',0],['F',3],['F',6]
+      ]);
+    }
+  }
+  move_F(times=1) {
+    this.faces.F = this.rotateFaceCW(this.faces.F, times);
+    for (let t=0;t<times;t++) {
+      this._cyclePositions([
+        ['U',6],['U',7],['U',8],
+        ['R',0],['R',3],['R',6],
+        ['D',2],['D',1],['D',0],
+        ['L',8],['L',5],['L',2]
+      ]);
+    }
+  }
+  move_B(times=1) {
+    this.faces.B = this.rotateFaceCW(this.faces.B, times);
+    for (let t=0;t<times;t++) {
+      this._cyclePositions([
+        ['U',2],['U',1],['U',0],
+        ['L',0],['L',3],['L',6],
+        ['D',6],['D',7],['D',8],
+        ['R',8],['R',5],['R',2]
+      ]);
+    }
+  }
+  applySeq(seq) {
+    let arr = [];
+    if (Array.isArray(seq)) arr = seq;
+    else if (typeof seq === 'string') arr = seq.trim().split(/\s+/).filter(s=>s);
+    for (const m of arr) this.applyMove(m);
+  }
+  isSolved() {
+    for (const k of Object.keys(this.faces)) {
+      const arr = this.faces[k];
+      for (let i=1;i<arr.length;i++) if (arr[i] !== arr[0]) return false;
+    }
+    return true;
+  }
+}
+function getCubeSvg(colorString, size=300) {
+  const faceOrder = ['U','R','F','D','L','B'];
+  if (!colorString || colorString.length < 54) colorString = 'w'.repeat(54);
+  const faces = {};
+  for (let i=0;i<6;i++) faces[faceOrder[i]] = colorString.slice(i*9, i*9+9).split('');
+  const cmap = { r:'#e11d48', g:'#10b981', b:'#2563eb', y:'#f59e0b', o:'#fb923c', w:'#f8fafc' };
+  const cell = Math.floor(size/12);
+  const pad = 6;
+  const svgW = cell*12 + pad*2;
+  const svgH = cell*9 + pad*2;
+  const pos = { U:[3,0], L:[0,3], F:[3,3], R:[6,3], B:[9,3], D:[3,6] };
+  let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<rect width="100%" height="100%" fill="transparent"/>`;
+  for (const f of ['U','L','F','R','B','D']) {
+    const [fx,fy] = pos[f]; const face = faces[f]; let idx=0;
+    for (let r=0;r<3;r++){
+      for (let c=0;c<3;c++){
+        const x = pad + (fx + c) * cell;
+        const y = pad + (fy + r) * cell;
+        const colorChar = face[idx++] || 'w';
+        const fill = cmap[colorChar] || '#777';
+        svg += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${fill}" stroke="#111" stroke-width="1" rx="4"/>`;
+      }
+    }
+  }
+  svg += `</svg>`;
+  return svg;
+}
+const cube = new Cube();
+let scrambleHistory = [];
+function render() {
+  document.getElementById('svgWrap').innerHTML = getCubeSvg(cube.toColorString(), 360);
+  document.getElementById('stateStr').textContent = cube.toColorString();
+  document.getElementById('movesLog').textContent = "Solved? " + (cube.isSolved() ? "Yes" : "No");
+}
+function randomMoves(n=20) {
+  const moves = ['U','R','F','D','L','B']; const suffix = ["","'"]; const res=[];
+  for (let i=0;i<n;i++){ const m=moves[Math.floor(Math.random()*moves.length)]; const s=suffix[Math.floor(Math.random()*2)]; res.push(m+s);}
+  return res;
+}
+document.getElementById('scrambleBtn').addEventListener('click', () => {
+  scrambleHistory = randomMoves(20);
+  const fresh = new Cube(); Object.assign(cube.faces, fresh.faces);
+  cube.applySeq(scrambleHistory);
+  document.getElementById('scrambleMoves').textContent = scrambleHistory.join(' ');
+  document.getElementById('solveMoves').textContent = '(not computed)';
+  render();
+});
+document.getElementById('randomScramble5').addEventListener('click', () => {
+  scrambleHistory = randomMoves(5);
+  const fresh = new Cube(); Object.assign(cube.faces, fresh.faces);
+  cube.applySeq(scrambleHistory);
+  document.getElementById('scrambleMoves').textContent = scrambleHistory.join(' ');
+  render();
+});
+document.getElementById('randomScramble40').addEventListener('click', () => {
+  scrambleHistory = randomMoves(40);
+  const fresh = new Cube(); Object.assign(cube.faces, fresh.faces);
+  cube.applySeq(scrambleHistory);
+  document.getElementById('scrambleMoves').textContent = scrambleHistory.join(' ');
+  render();
+});
+document.getElementById('showScrambleBtn').addEventListener('click', () => {
+  if (!scrambleHistory || scrambleHistory.length===0) { alert("No scramble generated yet."); return;}
+  alert("Scramble moves:\n" + scrambleHistory.join(' '));
+});
+function invertMove(m) { if (m.endsWith("'")) return m.slice(0,-1); return m + "'"; }
+document.getElementById('solveBtn').addEventListener('click', () => {
+  if (!scrambleHistory || scrambleHistory.length===0) { alert("No scramble generated yet."); return;}
+  const inv = scrambleHistory.slice().reverse().map(invertMove);
+  document.getElementById('solveMoves').textContent = inv.join(' ');
+  cube.applySeq(inv);
+  document.getElementById('movesLog').textContent = "Applied inverse moves. Solved? " + (cube.isSolved() ? "Yes" : "No");
+  render();
+});
+document.getElementById('stepSolveBtn').addEventListener('click', async () => {
+  if (!scrambleHistory || scrambleHistory.length===0) { alert("No scramble generated."); return;}
+  const inv = scrambleHistory.slice().reverse().map(invertMove);
+  document.getElementById('solveMoves').textContent = inv.join(' ');
+  for (let i=0;i<inv.length;i++){
+    const m=inv[i]; cube.applyMove(m);
+    document.getElementById('movesLog').textContent = `Step ${i+1}/${inv.length}: ${m}`;
+    render(); await new Promise(r => setTimeout(r, 350));
+  }
+  document.getElementById('movesLog').textContent = "Done. Solved? " + (cube.isSolved() ? "Yes" : "No");
+  render();
+});
+render();
+</script>
+</body>
+</html>
