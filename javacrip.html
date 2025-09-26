@@ -17,8 +17,6 @@
   .log { font-size: 13px; color:#333; }
   .small { font-size: 13px; color:#666; }
   label { display:block; margin-top:8px; font-size:13px; color:#333; }
-
-  /* Dark mode styles */
   body.dark { background:#1e293b; color:#f1f5f9; }
   body.dark .card { background:#334155; color:#f1f5f9; }
   body.dark button.secondary { background:#475569; color:#f1f5f9; }
@@ -48,9 +46,9 @@
   <div class="card">
     <h1>About / Notes</h1>
     <div class="log">
-      <p>This demo implements a Cube class with standard face notation and manual rotations.</p>
-      <p><strong>Moves supported:</strong> U, U', R, R', F, F', D, D', L, L', B, B'</p>
-      <p>Scramble is generated as random sequence of moves. Solver uses the exact inverse of scramble moves (reversed order, each move inverted).</p>
+      <p><b>This demo implements a Cube class with standard face notation and manual rotations.</b></p>
+      <p><strong style="color: red;" >Moves supported:</strong> U, U', R, R', F, F', D, D', L, L', B, B'</p>
+      <p style="color: blue;" >Scramble is generated as random sequence of moves. Solver uses the exact inverse of scramble moves (reversed order, each move inverted).</p>
     </div>
 
     <label>Scramble moves</label>
@@ -72,15 +70,12 @@
 </div>
 
 <script>
-/* Light / Dark mode toggle */
 document.getElementById('lightBtn').addEventListener('click', () => {
   document.body.classList.remove('dark');
 });
 document.getElementById('darkBtn').addEventListener('click', () => {
   document.body.classList.add('dark');
 });
-
-/* === Your cube code below remains same === */
 class Cube {
   constructor() {
     this.faces = {
